@@ -483,6 +483,16 @@ def load_custom_css():
     """
     st.markdown(css, unsafe_allow_html=True)
 
+    st.markdown("""
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display: none;}
+        div[data-testid="stDecoration"] {display: none;}
+        div[data-testid="stFooter"] {display: none;}
+        </style>
+        """, unsafe_allow_html=True)
+
 
 def show_purple_hearts():
     """Display purple hearts animation"""
