@@ -563,6 +563,12 @@ def load_love_page_css():
         box-shadow: none !important;
     }
 
+    footer,
+        div:has(> a[href*="streamlit"]) {
+            opacity: 0.15 !important;
+            filter: blur(0.5px) !important;
+        }
+
     div[data-baseweb="button"]:hover,
     .stButton button:hover,
     button:hover {
