@@ -174,6 +174,139 @@ def generate_daily_problems():
     return problems
 
 
+# ==================== STREAK TRACKING ====================
+
+def get_today_date_string():
+    """
+    Get today's date in YYYY-MM-DD format.
+    Returns: String like "2024-01-15"
+    """
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def load_streak_data():
+    """
+    Load streak data from JSON file. Creates file with defaults if not exists.
+    Returns dict with streak information.
+    """
+    import json
+    import os
+
+    streak_file = "streak_data.json"
+    default_data = {
+        "current_streak": 0,
+        "longest_streak": 0,
+        "last_completion_date": None,
+        "completion_history": {}
+    }
+
+    try:
+        if os.path.exists(streak_file):
+            with open(streak_file, 'r') as f:
+                return json.load(f)
+        else:
+            # Create file with defaults for first-time users
+            with open(streak_file, 'w') as f:
+                json.dump(default_data, f, indent=2)
+            return default_data
+    except (json.JSONDecodeError, IOError):
+        # If file is corrupted, return defaults
+        return default_data
+
+
+def save_streak_data(data):
+    """
+    Save streak data to JSON file.
+    Args:
+        data: Dictionary containing streak information
+    """
+    import json
+
+    streak_file = "streak_data.json"
+    try:
+        with open(streak_file, 'w') as f:
+            json.dump(data, f, indent=2)
+    except IOError:
+        # Fail silently to not disrupt user experience
+        pass
+
+
+def calculate_streak(streak_data, today_str):
+    """
+    Calculate current streak based on last completion date.
+    Handles missed days and consecutive completions.
+
+    Args:
+        streak_data: Dict with streak information
+        today_str: Today's date as YYYY-MM-DD string
+
+    Returns:
+        Updated streak_data dict
+    """
+    from datetime import datetime
+
+    last_date_str = streak_data.get("last_completion_date")
+
+    # First time user
+    if last_date_str is None:
+        return streak_data
+
+    # Parse dates
+    today = datetime.strptime(today_str, "%Y-%m-%d")
+    last_completion = datetime.strptime(last_date_str, "%Y-%m-%d")
+
+    days_diff = (today - last_completion).days
+
+    if days_diff == 0:
+        # Same day - no change to streak
+        pass
+    elif days_diff == 1:
+        # Consecutive day - streak continues (will increment on completion)
+        pass
+    else:
+        # Missed one or more days - streak breaks
+        streak_data["current_streak"] = 0
+
+    return streak_data
+
+
+def update_streak_on_completion():
+    """
+    Called when user completes all 3 problems.
+    Updates streak, saves to file, and updates session state.
+    """
+    today_str = get_today_date_string()
+    streak_data = load_streak_data()
+
+    # Calculate current streak based on time elapsed
+    streak_data = calculate_streak(streak_data, today_str)
+
+    # Check if already completed today (prevent double-counting)
+    if streak_data.get("last_completion_date") == today_str:
+        # Already completed today, don't increment
+        return streak_data
+
+    # Increment streak for today's completion
+    streak_data["current_streak"] += 1
+    streak_data["last_completion_date"] = today_str
+
+    # Update longest streak if current exceeds it
+    if streak_data["current_streak"] > streak_data["longest_streak"]:
+        streak_data["longest_streak"] = streak_data["current_streak"]
+
+    # Update completion history
+    streak_data["completion_history"][today_str] = True
+
+    # Save to file
+    save_streak_data(streak_data)
+
+    # Update session state so UI reflects immediately
+    st.session_state.streak_data = streak_data
+
+    return streak_data
+
+
 # ==================== PHASE 2: INTERACTIVE UI ====================
 
 def load_custom_css():
@@ -213,6 +346,38 @@ def load_custom_css():
         -webkit-text-fill-color: unset !important;
         background-clip: unset !important;
         font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif !important;
+    }
+
+    /* Streak badge - glassmorphic design */
+    .streak-badge {
+        background: rgba(217, 70, 239, 0.08) !important;
+        border: 1px solid rgba(217, 70, 239, 0.2) !important;
+        border-radius: 16px !important;
+        padding: 0.8rem 1.5rem !important;
+        text-align: center !important;
+        margin: -1rem auto 2rem auto !important;
+        max-width: fit-content !important;
+        backdrop-filter: blur(10px) !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    }
+
+    .streak-text {
+        color: rgba(255, 255, 255, 0.85) !important;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        letter-spacing: -0.01em !important;
+        margin: 0 !important;
+    }
+
+    .streak-fire {
+        font-size: 1.1rem !important;
+        margin-right: 0.3rem !important;
+    }
+
+    .streak-separator {
+        color: rgba(255, 255, 255, 0.3) !important;
+        margin: 0 0.5rem !important;
     }
 
     /* Container - centered and spacious */
@@ -256,14 +421,14 @@ def load_custom_css():
         font-weight: 500 !important;
     }
 
-    /* Input field - SUPER WIDE, fully transparent, centered text */
+    /* Input field - SUPER WIDE, fully transparent, centered text, TALLER */
     div[data-testid="stNumberInput"] input,
     .stNumberInput input,
     input[type="number"] {
         background: transparent !important;
         border: 1px solid rgba(255, 255, 255, 0.06) !important;
         border-radius: 14px !important;
-        padding: 1.5rem 6rem !important;
+        padding: 2.5rem 6rem !important;
         font-size: 2.2rem !important;
         text-align: center !important;
         font-weight: 300 !important;
@@ -277,6 +442,7 @@ def load_custom_css():
         display: block !important;
         backdrop-filter: none !important;
         box-shadow: none !important;
+        min-height: 80px !important;
     }
 
     div[data-testid="stNumberInput"] input:focus,
@@ -639,6 +805,31 @@ def main():
     load_custom_css()
     st.title("Dori Math 🐟🦄")
 
+    # Load and display streak
+    today_str = get_today_date_string()
+    streak_data = load_streak_data()
+
+    # Calculate streak (handles missed days)
+    streak_data = calculate_streak(streak_data, today_str)
+
+    # Store in session state for access
+    if 'streak_data' not in st.session_state:
+        st.session_state.streak_data = streak_data
+
+    current_streak = st.session_state.streak_data.get("current_streak", 0)
+    longest_streak = st.session_state.streak_data.get("longest_streak", 0)
+
+    # Display streak badge (always visible)
+    streak_html = f"""
+    <div class="streak-badge">
+        <p class="streak-text">
+            <span class="streak-fire">🔥</span>{current_streak} day streak
+            <span class="streak-separator">•</span>Best: {longest_streak}
+        </p>
+    </div>
+    """
+    st.markdown(streak_html, unsafe_allow_html=True)
+
     # Initialize session state
     if 'problems' not in st.session_state:
         st.session_state.problems = generate_daily_problems()
@@ -646,6 +837,7 @@ def main():
         st.session_state.completed = False
         st.session_state.feedback_message = None
         st.session_state.feedback_type = None
+        st.session_state.streak_updated_today = False
 
     problems = st.session_state.problems
     current = st.session_state.current_problem
@@ -667,7 +859,22 @@ def main():
 
     # Show completion message
     if st.session_state.completed:
-        st.success("🤍 Amazing! You completed all 3 problems! So proud of you!")
+        # Update streak ONLY on first completion of the day
+        if not st.session_state.get('streak_updated_today', False):
+            streak_data = update_streak_on_completion()
+            st.session_state.streak_updated_today = True
+
+        # Get updated streak for display
+        current = st.session_state.streak_data.get("current_streak", 0)
+
+        # Success message with streak info
+        if current == 1:
+            st.success("🤍 Amazing! You completed all 3 problems! You started a streak!")
+        elif current > 1:
+            st.success(f"🤍 Amazing! You completed all 3 problems! {current} day streak! 🔥")
+        else:
+            st.success("🤍 Amazing! You completed all 3 problems! So proud of you!")
+
         st.balloons()
         st.write("")
 
